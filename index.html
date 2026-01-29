@@ -1,0 +1,230 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Heart Rate — Minimal</title>
+    <style>
+        :root{
+            --bg: #f5f6f7;
+            --card: #fff;
+            --muted: #6b7280;
+            --accent: #e0263d;
+            --glass: rgba(255,255,255,0.6);
+            --shadow: 0 6px 20px rgba(16,24,40,0.08);
+            --radius: 14px;
+        }
+        html,body{height:100%; margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue"; background:var(--bg); color:#111827;}
+        .wrap{min-height:100%; display:flex; align-items:center; justify-content:center; padding:48px;}
+        .card{
+            width:100%;
+            max-width:820px;
+            background:linear-gradient(180deg, rgba(255,255,255,0.9), var(--card));
+            border-radius:var(--radius);
+            box-shadow:var(--shadow);
+            padding:28px;
+            display:grid;
+            grid-template-columns: 1fr 320px;
+            gap:20px;
+            align-items:start;
+        }
+        .header{
+            display:flex; align-items:center; gap:14px; margin-bottom:8px;
+        }
+        .logo{
+            width:48px; height:48px; display:flex; align-items:center; justify-content:center; border-radius:10px;
+            background:linear-gradient(135deg, rgba(224,38,61,0.12), rgba(224,38,61,0.04));
+        }
+        .title{font-size:16px; font-weight:600;}
+        .subtitle{font-size:13px; color:var(--muted); margin-top:2px;}
+        .main{
+            padding:10px 0 0 0;
+        }
+        .bpm-row{display:flex; align-items:baseline; gap:20px;}
+        .bpm{font-size:84px; font-weight:700; color:#0f172a; line-height:1;}
+        .unit{font-size:20px; color:var(--muted);}
+        .meta{margin-top:8px; color:var(--muted); font-size:13px;}
+        .stats{
+            background:var(--glass);
+            border-radius:10px;
+            padding:12px;
+            display:flex;
+            gap:10px;
+            align-items:center;
+            justify-content:space-between;
+            box-shadow:inset 0 1px 0 rgba(255,255,255,0.6);
+        }
+        .stat{display:flex; flex-direction:column; gap:6px; align-items:flex-start;}
+        .stat strong{font-size:18px;}
+        .stat small{color:var(--muted); font-size:12px;}
+        /* right column */
+        .panel{background:transparent; display:flex; flex-direction:column; gap:12px;}
+        #chartContainer{background:var(--card); border-radius:10px; padding:10px; box-shadow:var(--shadow); display:flex; align-items:center; justify-content:center;}
+        canvas{width:100% !important; height:200px !important;}
+        .mini{font-size:12px; color:var(--muted); text-align:center;}
+        .pulse{
+            animation: pulse 420ms ease;
+        }
+        @keyframes pulse{
+            0%{transform:scale(1); opacity:1;}
+            50%{transform:scale(1.06); opacity:0.98;}
+            100%{transform:scale(1); opacity:1;}
+        }
+        /* responsive */
+        @media (max-width:880px){
+            .card{grid-template-columns:1fr; padding:20px;}
+            .panel{order:2;}
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="card" role="region" aria-label="Heart rate monitor">
+        <div>
+            <div class="header">
+                <div class="logo" aria-hidden="true">
+                    <!-- small heart SVG logo -->
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                        <path d="M12 21s-7.5-4.87-9.5-8.06C-0.5 8.97 4.2 4 7.5 6.4 9 7.7 11 9.9 12 11c1-1.1 3-3.3 4.5-4.6C19.8 4 24.5 8.97 21.5 12.94 19.5 16.13 12 21 12 21z" fill="rgba(224,38,61,0.95)"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="title">Heart Rate</div>
+                    <div class="subtitle">Live Data</div>
+                </div>
+            </div>
+
+            <div class="main" aria-live="polite">
+                <div class="bpm-row">
+                    <div>
+                        <div id="bpm" class="bpm">--</div>
+                        <div class="unit">BPM</div>
+                    </div>
+                    <div style="flex:1;">
+                        <div class="meta" id="time">--</div>
+                    </div>
+                </div>
+
+                <div style="margin-top:14px;" class="stats" aria-hidden="false">
+                    <div class="stat">
+                        <small>Minimum</small>
+                        <strong id="minBpm">—</strong>
+                    </div>
+                    <div class="stat">
+                        <small>Maximum</small>
+                        <strong id="maxBpm">—</strong>
+                    </div>
+                    <div class="stat">
+                        <small>Average (last 60s)</small>
+                        <strong id="avgBpm">—</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div id="chartContainer" aria-hidden="false">
+                <canvas id="hrChart" role="img" aria-label="Heart rate trend chart"></canvas>
+            </div>
+            <div class="mini">Trend shows the most recent values</div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js (v3) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+    // Init chart
+    const ctx = document.getElementById('hrChart').getContext('2d');
+    const hrChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'BPM',
+                data: [],
+                borderColor: 'rgb(224,38,61)',
+                backgroundColor: 'rgba(224,38,61,0.12)',
+                fill: true,
+                tension: 0.35,
+                pointRadius: 0,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { display: false },
+                y: {
+                    display: true,
+                    suggestedMin: 40,
+                    suggestedMax: 160,
+                    grid: { color: 'rgba(15,23,42,0.06)' }
+                }
+            },
+            plugins: { legend: { display: false } },
+            animation: false
+        }
+    });
+
+    // SSE and stats
+    const evtSource = new EventSource('/api/hr/stream');
+    const MAX_POINTS = 60;
+    let minBpm = Infinity, maxBpm = -Infinity;
+    const values = []; // for average
+
+    function updateStats(bpm) {
+        if (bpm < minBpm) minBpm = bpm;
+        if (bpm > maxBpm) maxBpm = bpm;
+
+        values.push(bpm);
+        if (values.length > MAX_POINTS) values.shift();
+        const avg = values.reduce((s,v)=>s+v,0)/values.length;
+
+        document.getElementById('minBpm').textContent = isFinite(minBpm) ? Math.round(minBpm) : '—';
+        document.getElementById('maxBpm').textContent = isFinite(maxBpm) ? Math.round(maxBpm) : '—';
+        document.getElementById('avgBpm').textContent = values.length ? Math.round(avg) : '—';
+    }
+
+    evtSource.addEventListener('hr', event => {
+        try {
+            const data = JSON.parse(event.data);
+            const bpm = Number(data.bpm);
+            if (!Number.isFinite(bpm)) return;
+            const ts = new Date(data.timestamp || Date.now());
+
+            // Update text
+            const bpmEl = document.getElementById('bpm');
+            bpmEl.textContent = Math.round(bpm);
+            // pulse animation
+            bpmEl.classList.remove('pulse');
+            void bpmEl.offsetWidth;
+            bpmEl.classList.add('pulse');
+
+            document.getElementById('time').textContent = ts.toLocaleString();
+
+            // Update chart
+            const timeLabel = ts.toLocaleTimeString();
+            hrChart.data.labels.push(timeLabel);
+            hrChart.data.datasets[0].data.push(bpm);
+            while (hrChart.data.labels.length > MAX_POINTS) {
+                hrChart.data.labels.shift();
+                hrChart.data.datasets[0].data.shift();
+            }
+            hrChart.update('none');
+
+            // update stats
+            updateStats(bpm);
+        } catch (e) {
+            console.error('Invalid HR event', e);
+        }
+    });
+
+    evtSource.onerror = () => {
+        console.error('EventSource failed');
+        // optionally show offline state
+    };
+</script>
+</body>
+</html>
